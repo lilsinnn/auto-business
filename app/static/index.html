@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kimi Light Invoices</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+    <div class="sidebar">
+        <div class="logo">
+            <span class="logo-icon">✨</span>
+            <h1>Kimi Invoice</h1>
+        </div>
+        <nav>
+            <a href="#" class="active">Дашборд</a>
+            <a href="#">Настройки</a>
+        </nav>
+        <div class="storage-info">
+            <div class="progress-bar">
+                <div class="fill" style="width: 15%"></div>
+            </div>
+            <span>SQLite Active</span>
+        </div>
+    </div>
+
+    <main class="content">
+        <header>
+            <div>
+                <h2 class="page-title">Счета и Заявки</h2>
+                <p class="subtitle">Легкое приложение без React</p>
+            </div>
+            <div class="header-actions" style="display: flex; gap: 12px; align-items: center;">
+                <label
+                    style="font-size: 0.9rem; margin-right: 12px; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                    <input type="checkbox" id="showIgnoredToggle">
+                    Показывать не-заказы
+                </label>
+                <button id="resetDbBtn" class="btn danger">
+                    <span class="icon">🗑️</span> Сброс БД
+                </button>
+                <button id="fetchEmailsBtn" class="btn primary">
+                    <span class="icon">📩</span> Проверить почту
+                </button>
+            </div>
+        </header>
+
+        <section id="dashboardView" class="requests-board active-view">
+            <div class="table-card">
+                <table id="requestsTable">
+                    <thead>
+                        <tr>
+                            <th>Отправитель</th>
+                            <th>Тема</th>
+                            <th>Дата</th>
+                            <th>Статус</th>
+                            <th>Товары / Источники</th>
+                            <th>Счет</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <!-- Data will be populated here by JS -->
+                        <tr class="loading-state">
+                            <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted)">
+                                Загрузка заявок...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="settingsView" class="settings-board" style="display: none; padding-top: 20px;">
+            <div class="table-card" style="padding: 24px;">
+                <h3 style="margin-bottom: 20px;">Настройки системы</h3>
+
+                <div style="margin-bottom: 30px;">
+                    <h4 style="margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">Доступ
+                        к Почте (IMAP)</h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <label
+                                style="display: block; font-size: 0.85rem; color: var(--text-sub); margin-bottom: 5px;">Сервер
+                                (IMAP)</label>
+                            <input type="text" id="cfgImapServer" class="form-input"
+                                style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: rgba(0,0,0,0.02); color: var(--text-main);">
+                        </div>
+                        <div>
+                            <label
+                                style="display: block; font-size: 0.85rem; color: var(--text-sub); margin-bottom: 5px;">Порт</label>
+                            <input type="text" id="cfgImapPort" class="form-input"
+                                style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: rgba(0,0,0,0.02); color: var(--text-main);">
+                        </div>
+                        <div>
+                            <label
+                                style="display: block; font-size: 0.85rem; color: var(--text-sub); margin-bottom: 5px;">Почта
+                                (E-mail)</label>
+                            <input type="text" id="cfgImapUser" class="form-input"
+                                style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: rgba(0,0,0,0.02); color: var(--text-main);">
+                        </div>
+                        <div>
+                            <label
+                                style="display: block; font-size: 0.85rem; color: var(--text-sub); margin-bottom: 5px;">Пароль
+                                (Для приложений)</label>
+                            <input type="password" id="cfgImapPass" class="form-input"
+                                style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: rgba(0,0,0,0.02); color: var(--text-main);">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 30px;">
+                    <h4 style="margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">Web
+                        Скрапер (Yandex Cloud)</h4>
+                    <div style="display: grid; grid-template-columns: 1fr; gap: 15px;">
+                        <div>
+                            <label
+                                style="display: block; font-size: 0.85rem; color: var(--text-sub); margin-bottom: 5px;">Folder
+                                ID (.env YANDEX_SEARCH_USER)</label>
+                            <input type="text" id="cfgSearchUser" class="form-input"
+                                style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: rgba(0,0,0,0.02); color: var(--text-main);">
+                        </div>
+                        <div>
+                            <label
+                                style="display: block; font-size: 0.85rem; color: var(--text-sub); margin-bottom: 5px;">API
+                                Key (.env YANDEX_SEARCH_KEY)</label>
+                            <input type="password" id="cfgSearchKey" class="form-input"
+                                style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: rgba(0,0,0,0.02); color: var(--text-main);">
+                        </div>
+                    </div>
+                    <div style="margin-top: 20px;">
+                        <button id="saveConfigBtn" class="btn active">Сохранить Конфигурацию</button>
+                        <span id="configSaveStatus"
+                            style="display: none; margin-left: 10px; font-size: 0.85rem; color: #e74c3c;">Требуется
+                            перезагрузка сервера</span>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 24px;">
+                    <h4 style="margin-bottom: 8px;">Логирования и Отладка</h4>
+                    <p style="color: var(--text-sub); font-size: 0.9rem; margin-bottom: 12px;">Скачайте серверный
+                        лог-файл (app.log) для диагностики API Яндекса и парсера.</p>
+                    <button id="downloadLogsBtn" class="btn primary">Скачать логи</button>
+                </div>
+
+                <div style="margin-bottom: 24px;">
+                    <h4 style="margin-bottom: 8px;">Обратная связь</h4>
+                    <p style="color: var(--text-sub); font-size: 0.9rem; margin-bottom: 12px;">Нашли баг или хотите
+                        предложить улучшение?</p>
+                    <textarea id="feedbackText" placeholder="Опишите баг или предложение..."
+                        style="width: 100%; height: 80px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: rgba(0,0,0,0.02); color: var(--text-main); font-family: inherit; resize: vertical; margin-bottom: 10px;"></textarea>
+                    <button id="submitFeedbackBtn" class="btn outline">Отправить разработчику</button>
+                    <span id="feedbackStatus"
+                        style="display: none; margin-left: 10px; font-size: 0.85rem; color: #2ecc71;">✓ Сохранено в
+                        файл</span>
+                </div>
+
+            </div>
+
+            <div class="credits" style="text-align: center; margin-top: 40px; color: var(--text-sub);">
+                <span style="font-size: 0.85rem;">Powered by</span>
+                <br>
+                <img src="/static/8osk_white.png" alt="8osk"
+                    style="height: 30px; margin-top: 10px; filter: invert(1) brightness(0) drop-shadow(0 0 5px rgba(0,0,0,0.1));">
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal for details -->
+    <div id="detailsModal" class="modal-backdrop">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Детали заявки</h3>
+                <button class="close-btn" id="closeModal">&times;</button>
+            </div>
+            <div class="modal-body" id="modalContent">
+                <!-- Injected via JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Template for rows to keep JS clean -->
+    <template id="rowTemplate">
+        <tr>
+            <td class="sender cell-text-main"></td>
+            <td class="subject cell-text-sub"></td>
+            <td class="date cell-text-sub"></td>
+            <td class="status">
+                <span class="badge"></span>
+            </td>
+            <td class="items">
+                <ul class="items-list"></ul>
+            </td>
+            <td class="invoice-link">
+                <!-- Anchor will be injected here -->
+            </td>
+            <td class="actions">
+                <button class="btn-icon view-details" title="Подробнее">👁️</button>
+            </td>
+        </tr>
+    </template>
+
+    <script src="/static/app.js"></script>
+</body>
+
+</html>
