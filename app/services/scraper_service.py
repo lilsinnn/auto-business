@@ -85,16 +85,16 @@ def _yandex_search(query_text: str) -> list:
         for doc in soup.find_all('doc'):
             doc_url = doc.url.text if doc.url else ""
             doc_title = doc.title.text if doc.title else ""
+            # Извлекаем цены ТОЛЬКО из сниппетов (passages), НЕ из заголовков!
+            # Заголовки содержат "от X руб" — это мин. цена по всей категории, не по товару
             doc_passages = " ".join([p.text for p in doc.find_all('passage')])
-            full_text = f"{doc_title} {doc_passages}"
 
-            prices = extract_prices(full_text)
+            prices = extract_prices(doc_passages)
             if prices:
-                # Берём минимальную из найденных на одной странице (скорее всего цена за 1 шт)
-                best_price = min(prices)
-                clean_title = re.sub('<[^<]+>', '', doc_title)[:80]
-                hits.append((best_price, doc_url, clean_title))
-                logger.info(f"  💰 {best_price}₽ @ {_get_domain(doc_url)} — {clean_title[:40]}")
+                # Медиана цен в рамках одного сниппета
+                best_price = sorted(prices)[len(prices) // 2]
+                hits.append((best_price, doc_url))
+                logger.info(f"  💰 {best_price}₽ @ {_get_domain(doc_url)}")
 
         return hits
 
@@ -143,9 +143,10 @@ async def scrape_for_items(db, items):
 
             # Берём вариант ближайший к медиане
             best = min(all_hits, key=lambda h: abs(h[0] - med_price))
-            price, source_url, title = best
+            price, source_url = best
 
-            item.found_name = title
+            # НЕ меняем found_name — оставляем исходное название товара
+            item.found_name = item.original_name
             item.price = price
             item.source_url = source_url
 
