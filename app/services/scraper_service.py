@@ -14,6 +14,34 @@ YANDEX_API_KEY = os.getenv("YANDEX_SEARCH_KEY")
 
 logger = logging.getLogger(__name__)
 
+# Проверенные поставщики из реестра (config/suppliers.json программы кими)
+TRUSTED_SUPPLIERS = {
+    'santechkomplekt.ru': 'Сантехкомплект',
+    'bkarmatura.ru': 'БК Арматура',
+    'lunda.ru': 'Лунда',
+    'metalloservis.ru': 'Металлосервис',
+    'trubmet.ru': 'Трубмет',
+    'armatura.ru': 'Арматура.ру',
+    'tpm.ru': 'Трубопроводный Мир',
+    'metallsnab.ru': 'МеталлСнаб',
+    'trubstal.ru': 'ТрубСталь',
+    'pulscen.ru': 'Пульс Цен',
+    'krepezh.ru': 'Крепежный Двор',
+    'boltservice.ru': 'БолтСервис',
+}
+
+def _get_domain(url: str) -> str:
+    """Extract domain from URL."""
+    try:
+        return url.split('/')[2].replace('www.', '')
+    except:
+        return ''
+
+def _is_trusted(url: str) -> bool:
+    """Check if URL belongs to a trusted supplier."""
+    domain = _get_domain(url)
+    return any(td in domain for td in TRUSTED_SUPPLIERS)
+
 def extract_price(text: str) -> float:
     """Attempt to extract price from snippet or title."""
     if not text:
@@ -82,23 +110,31 @@ async def scrape_for_items(db, items):
                         price = extract_price(doc_passages) or extract_price(doc_title)
                         if price:
                             clean_title = re.sub('<[^<]+>', '', doc_title)[:50]
-                            price_hits.append((price, doc_url, clean_title))
+                            is_known = _is_trusted(doc_url)
+                            price_hits.append((price, doc_url, clean_title, is_known))
                             
                     if price_hits:
-                        logger.info(f"Found {len(price_hits)} prices for '{item.original_name}'. Calculating median...")
-                        # Sort by price to get median
-                        price_hits.sort(key=lambda x: x[0])
-                        median_idx = len(price_hits) // 2
-                        med_price, med_url, med_title = price_hits[median_idx]
+                        # Приоритет: сначала проверенные поставщики
+                        trusted_hits = [h for h in price_hits if h[3]]
+                        untrusted_hits = [h for h in price_hits if not h[3]]
+                        
+                        if trusted_hits:
+                            logger.info(f"Found {len(trusted_hits)} prices from TRUSTED suppliers for '{item.original_name}'.")
+                            chosen = trusted_hits
+                        else:
+                            logger.info(f"No trusted supplier prices. Using {len(untrusted_hits)} general prices for '{item.original_name}'.")
+                            chosen = untrusted_hits
+                        
+                        # Медиана из выбранного пула
+                        chosen.sort(key=lambda x: x[0])
+                        median_idx = len(chosen) // 2
+                        med_price, med_url, med_title, _ = chosen[median_idx]
                         
                         item.found_name = med_title
                         item.price = med_price
                         item.source_url = med_url
-                        try:
-                            domain = med_url.split('/')[2]
-                            item.supplier_name = domain.replace("www.", "")
-                        except:
-                            item.supplier_name = "Yandex Search"
+                        domain = _get_domain(med_url)
+                        item.supplier_name = TRUSTED_SUPPLIERS.get(domain, domain)
             else:
                 print(f"Yandex API Error for {item.original_name}: {resp.status_code} - {resp.text[:200]}")
                 
