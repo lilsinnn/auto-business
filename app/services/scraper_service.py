@@ -46,11 +46,17 @@ def extract_price(text: str) -> float:
     """Attempt to extract price from snippet or title."""
     if not text:
         return None
+    # Ищем цены в формате "1 234.56 руб" или "500₽"
     matches = re.finditer(r'(\d{1,3}(?:\s\d{3})*(?:[.,]\d{1,2})?)\s*(?:руб|р\.|₽)', text, re.IGNORECASE)
     for match in matches:
         try:
             val_str = match.group(1).replace(" ", "").replace(",", ".")
-            return float(val_str)
+            price = float(val_str)
+            # Фильтр адекватности цены (за 1 шт трубопроводной арматуры)
+            # Меньше 10₽ — скорее всего мусор, больше 15000₽ — за партию или за другой товар
+            if price < 10 or price > 15000:
+                continue
+            return price
         except:
             pass
     return None
