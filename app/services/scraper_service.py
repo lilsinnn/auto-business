@@ -15,7 +15,94 @@ YANDEX_API_KEY = os.getenv("YANDEX_SEARCH_KEY")
 
 logger = logging.getLogger(__name__)
 
-# Проверенные поставщики — ищем прямо на их сайтах
+# ========================================================================
+# ЛОКАЛЬНАЯ БАЗА ЦЕН ПОСТАВЩИКОВ (из программы кими)
+# Ключ: нормализованные ключевые слова из названия товара
+# Значение: (цена, поставщик, ссылка)
+# ========================================================================
+PRICE_DATABASE = {
+    # === ОТВОДЫ ===
+    ('отвод', '57', '4', 'ст20'):     (1250.00, 'Сантехкомплект', 'https://santechkomplekt.ru'),
+    ('отвод', '57', '4', '20'):       (1250.00, 'Сантехкомплект', 'https://santechkomplekt.ru'),
+    ('отвод', '57', '4'):             (1180.00, 'БК Арматура',    'https://bkarmatura.ru'),
+    ('отвод', '89', '4', 'ст20'):     (1850.00, 'Сантехкомплект', 'https://santechkomplekt.ru'),
+    ('отвод', '89', '4', '20'):       (1850.00, 'Сантехкомплект', 'https://santechkomplekt.ru'),
+    ('отвод', '89', '4'):             (1780.00, 'Лунда',          'https://lunda.ru'),
+    ('отвод', '108', '4', 'ст20'):    (2450.00, 'Сантехкомплект', 'https://santechkomplekt.ru'),
+    ('отвод', '108', '4'):            (2450.00, 'Сантехкомплект', 'https://santechkomplekt.ru'),
+    ('отвод', '57', '4', '09г2с'):    (1450.00, 'БК Арматура',    'https://bkarmatura.ru'),
+
+    # === ТРОЙНИКИ ===
+    ('тройник', '57', '4', 'ст20'):   (1850.00, 'Сантехкомплект', 'https://santechkomplekt.ru'),
+    ('тройник', '57', '4', '20'):     (1850.00, 'Сантехкомплект', 'https://santechkomplekt.ru'),
+    ('тройник', '57', '4'):           (1750.00, 'БК Арматура',    'https://bkarmatura.ru'),
+    ('тройник', '108', '5', '09г2с'): (3200.00, 'Сантехкомплект', 'https://santechkomplekt.ru'),
+    ('тройник', '108', '5'):          (2950.00, 'Лунда',          'https://lunda.ru'),
+
+    # === ФЛАНЦЫ ===
+    ('фланец', '50', '16'):           (850.00,  'Сантехкомплект', 'https://santechkomplekt.ru'),
+    ('фланец', '50'):                 (780.00,  'Лунда',          'https://lunda.ru'),
+    ('фланец', '80', '16'):           (1200.00, 'Сантехкомплект', 'https://santechkomplekt.ru'),
+    ('фланец', '80'):                 (1100.00, 'Лунда',          'https://lunda.ru'),
+    ('фланец', '100', '16'):          (1450.00, 'Сантехкомплект', 'https://santechkomplekt.ru'),
+    ('фланец', '100'):                (1350.00, 'Лунда',          'https://lunda.ru'),
+
+    # === ПЕРЕХОДЫ ===
+    ('переход', '57', '32'):          (980.00,  'Сантехкомплект', 'https://santechkomplekt.ru'),
+    ('переход', '89', '57'):          (1350.00, 'БК Арматура',    'https://bkarmatura.ru'),
+    ('переход', '108', '57'):         (1800.00, 'Сантехкомплект', 'https://santechkomplekt.ru'),
+
+    # === ЗАДВИЖКИ / КРАНЫ ===
+    ('задвижка', '50'):               (4500.00, 'БК Арматура',    'https://bkarmatura.ru'),
+    ('задвижка', '80'):               (7200.00, 'БК Арматура',    'https://bkarmatura.ru'),
+    ('задвижка', '100'):              (9500.00, 'БК Арматура',    'https://bkarmatura.ru'),
+    ('кран', 'шаровой', '50'):        (3200.00, 'Сантехкомплект', 'https://santechkomplekt.ru'),
+    ('кран', 'шаровой', '80'):        (5800.00, 'Сантехкомплект', 'https://santechkomplekt.ru'),
+
+    # === МЕТАЛЛОПРОКАТ ===
+    ('лист', '10', 'ст3'):            (85.00,   'Металлосервис',  'https://metalloservis.ru'),  # за кг
+    ('лист', '10', 'ст20'):           (92.00,   'Металлосервис',  'https://metalloservis.ru'),  # за кг
+    ('круг', '20', 'ст3'):            (78.00,   'Металлосервис',  'https://metalloservis.ru'),  # за кг
+    ('круг', '20', 'ст20'):           (85.00,   'Металлосервис',  'https://metalloservis.ru'),  # за кг
+    ('уголок', '50', '5'):            (82.00,   'Металлосервис',  'https://metalloservis.ru'),  # за кг
+    ('швеллер', '10'):                (88.00,   'Металлосервис',  'https://metalloservis.ru'),  # за кг
+    ('арматура', '12'):               (72.00,   'Металлосервис',  'https://metalloservis.ru'),  # за кг
+}
+
+
+def _normalize_text(text: str) -> list[str]:
+    """Разбивает название товара на нормализованные токены."""
+    text = text.lower()
+    text = re.sub(r'[^\w\s]', ' ', text)  # убираем пунктуацию
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text.split()
+
+
+def _lookup_local_price(product_name: str):
+    """
+    Ищет цену в локальной базе по максимальному совпадению ключевых слов.
+    Возвращает (price, supplier, url) или None.
+    """
+    tokens = _normalize_text(product_name)
+
+    best_match = None
+    best_match_len = 0
+
+    for key_tuple, value in PRICE_DATABASE.items():
+        # Все ключи из кортежа должны присутствовать в токенах
+        if all(k in tokens for k in key_tuple):
+            # Чем длиннее совпадение (больше специфичность) — тем лучше
+            if len(key_tuple) > best_match_len:
+                best_match = value
+                best_match_len = len(key_tuple)
+
+    return best_match
+
+
+# ========================================================================
+# Yandex Search — фоллбэк для товаров, которых нет в локальной базе
+# ========================================================================
+
 TRUSTED_SITES = [
     ('santechkomplekt.ru', 'Сантехкомплект'),
     ('bkarmatura.ru', 'БК Арматура'),
@@ -34,7 +121,6 @@ def _get_domain(url: str) -> str:
 
 
 def extract_prices(text: str) -> list[float]:
-    """Extract ALL prices from text, return list."""
     if not text:
         return []
     prices = []
@@ -49,7 +135,7 @@ def extract_prices(text: str) -> list[float]:
 
 
 def _yandex_search(query_text: str) -> list:
-    """Execute one Yandex Cloud Search API v2 call, return list of (price, url, title)."""
+    """Yandex Cloud Search API v2, возвращает [(price, url)]."""
     url = "https://searchapi.api.cloud.yandex.net/v2/web/search"
     headers = {
         "Authorization": f"Api-Key {YANDEX_API_KEY}",
@@ -69,8 +155,7 @@ def _yandex_search(query_text: str) -> list:
             logger.error(f"Yandex API {resp.status_code}: {resp.text[:200]}")
             return []
 
-        result_json = resp.json()
-        raw_b64 = result_json.get("rawData")
+        raw_b64 = resp.json().get("rawData")
         if not raw_b64:
             return []
 
@@ -84,14 +169,9 @@ def _yandex_search(query_text: str) -> list:
         hits = []
         for doc in soup.find_all('doc'):
             doc_url = doc.url.text if doc.url else ""
-            doc_title = doc.title.text if doc.title else ""
-            # Извлекаем цены ТОЛЬКО из сниппетов (passages), НЕ из заголовков!
-            # Заголовки содержат "от X руб" — это мин. цена по всей категории, не по товару
             doc_passages = " ".join([p.text for p in doc.find_all('passage')])
-
             prices = extract_prices(doc_passages)
             if prices:
-                # Медиана цен в рамках одного сниппета
                 best_price = sorted(prices)[len(prices) // 2]
                 hits.append((best_price, doc_url))
                 logger.info(f"  💰 {best_price}₽ @ {_get_domain(doc_url)}")
@@ -103,64 +183,68 @@ def _yandex_search(query_text: str) -> list:
         return []
 
 
+# ========================================================================
+# Главная функция — вызывается из main.py
+# ========================================================================
+
 async def scrape_for_items(db, items):
     """
     Для каждого товара:
-    1. Сначала ищет прямо на сайтах проверенных поставщиков (site:xxx.ru товар)
-    2. Если с проверенных ничего — делает общий поиск
-    3. Берёт медиану найденных цен
+    1. Сначала ищет в ЛОКАЛЬНОЙ БАЗЕ ЦЕН (мгновенно, точно)
+    2. Если не нашёл — фоллбэк в Yandex Search API
     """
-    if not YANDEX_FOLDER_ID or not YANDEX_API_KEY:
-        logger.error("Missing Yandex Cloud Search Credentials.")
-        return items
-
     for item in items:
         product = item.original_name
-        all_hits = []
+        logger.info(f"🔍 Ищем цену для: '{product}'")
 
-        # ===== ШАГ 1: Ищем прямо на проверенных сайтах =====
-        # Формируем один запрос с несколькими site: операторами
+        # ===== ШАГ 1: Локальная база цен =====
+        local = _lookup_local_price(product)
+        if local:
+            price, supplier, url = local
+            item.found_name = item.original_name
+            item.price = price
+            item.source_url = url
+            item.supplier_name = supplier
+            logger.info(f"✅ [ЛОКАЛЬНО] {product} → {price}₽ @ {supplier}")
+            continue
+
+        # ===== ШАГ 2: Yandex Search (фоллбэк) =====
+        if not YANDEX_FOLDER_ID or not YANDEX_API_KEY:
+            logger.warning(f"❌ Нет API ключей и нет локальной цены для '{product}'")
+            continue
+
+        # Ищем на проверенных сайтах
         sites_query = " | ".join(f"site:{s[0]}" for s in TRUSTED_SITES[:4])
         trusted_query = f"{product} цена ({sites_query})"
-        logger.info(f"[TRUSTED] Searching: '{trusted_query}'")
+        logger.info(f"[YANDEX] Searching: '{trusted_query}'")
 
-        trusted_hits = _yandex_search(trusted_query)
-        if trusted_hits:
-            all_hits = trusted_hits
-            logger.info(f"[TRUSTED] Found {len(trusted_hits)} price(s) from trusted sites for '{product}'")
+        all_hits = _yandex_search(trusted_query)
 
-        # ===== ШАГ 2: Если проверенные не дали ничего — общий поиск =====
+        # Если ничего с проверенных — общий поиск
         if not all_hits:
             general_query = f"{product} цена за штуку купить"
-            logger.info(f"[GENERAL] Searching: '{general_query}'")
+            logger.info(f"[YANDEX GENERAL] Searching: '{general_query}'")
             all_hits = _yandex_search(general_query)
-            logger.info(f"[GENERAL] Found {len(all_hits)} price(s) for '{product}'")
 
-        # ===== ШАГ 3: Выбираем лучшую цену =====
         if all_hits:
             prices_only = [h[0] for h in all_hits]
             med_price = median(prices_only)
-
-            # Берём вариант ближайший к медиане
             best = min(all_hits, key=lambda h: abs(h[0] - med_price))
             price, source_url = best
 
-            # НЕ меняем found_name — оставляем исходное название товара
             item.found_name = item.original_name
             item.price = price
             item.source_url = source_url
 
             domain = _get_domain(source_url)
-            # Ищем читаемое имя поставщика
             supplier_name = domain
             for site_domain, site_name in TRUSTED_SITES:
                 if site_domain in domain:
                     supplier_name = site_name
                     break
             item.supplier_name = supplier_name
-
-            logger.info(f"✅ {product} → {price}₽ @ {supplier_name}")
+            logger.info(f"✅ [YANDEX] {product} → {price}₽ @ {supplier_name}")
         else:
-            logger.warning(f"❌ No prices found for '{product}'")
+            logger.warning(f"❌ Цена не найдена для '{product}'")
 
     return items
